@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from .schemas import UserCreate, UserRead, TaskCreate, TaskRead
 from .models import User, Task
 from .db import get_db
+from fastapi import status
 from .security import (
 hash_password,
 verify_password,
@@ -70,6 +71,7 @@ current_user=Depends(get_current_user),
     description=data.description,
     priority=data.priority,
     completed=False,
+    owner_id=current_user.id,
     )
     db.add(new_task)
     db.commit()
@@ -81,5 +83,57 @@ def list_tasks(
 db: Session = Depends(get_db),
 current_user=Depends(get_current_user),
 ):
-    tasks = db.query(Task).all()
+    tasks = db.query(Task).filter(Task.owner_id==current_user.id).all()
     return tasks
+router.put("/tasks/{task_id}", response_model=TaskRead)
+def update_task(
+task_id: int,
+data: TaskCreate,
+db: Session = Depends(get_db),
+current_user=Depends(get_current_user),
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.owner_id == current_user.id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="task not found")
+    task.title = data.title
+    task.description = data.description
+    task.priority = data.priority
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+@router.put("/tasks/{task_id}", response_model=TaskRead)
+def update_task(
+task_id: int,
+data: TaskCreate,
+db: Session = Depends(get_db),
+current_user=Depends(get_current_user),
+):
+    task = db.query(Task).filter(
+    Task.id == task_id,
+    Task.owner_id == current_user.id,
+    ).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="task not found")
+    task.title = data.title
+    task.description = data.description
+    task.priority = data.priority
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+
+@router.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_task(
+task_id: int,
+db: Session = Depends(get_db),
+current_user=Depends(get_current_user),
+):
+    task = db.query(Task).filter(Task.id == task_id, Task.owner_id == current_user.id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="task not found")
+    db.delete(task)
+    db.commit()
+    return None
